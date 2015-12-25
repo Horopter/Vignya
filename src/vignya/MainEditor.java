@@ -1,7 +1,6 @@
 package vignya;
 
 import javax.swing.JFrame;
-import javax.swing.JPanel;
 import javax.swing.JTextPane;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -13,6 +12,9 @@ import java.awt.FlowLayout;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.Color;
+import java.awt.Container;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowAdapter;
@@ -23,15 +25,34 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.swing.ButtonGroup;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JRadioButton;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultHighlighter;
+import javax.swing.text.Highlighter;
+import javax.swing.text.Highlighter.HighlightPainter;
 
 
 public class MainEditor
 {
    private JFrame menuArea;
-   private JPanel contentArea;
+   private JTextArea contentArea;
    private JTextPane notesText;
+   private JDialog findDialog;
+   private List<Integer> searchIndices;
+   private boolean lastDirection = true;
+   private boolean directionChanged;
+   private int currentSearchIndex;
    public String fileName = "(untitled)";
    final String titular = " Vignya (version 1)";
    public MainEditor()
@@ -146,7 +167,7 @@ public class MainEditor
             if (JFileChooser.APPROVE_OPTION == fileChooser.showOpenDialog(menuArea)) 
             {
                 File file = fileChooser.getSelectedFile();
-                System.out.println("File selected" + file.getName());
+                //System.out.println("File selected" + file.getName());
                 menuArea.setTitle(file.getName()+titular);
                 notesText.setText(openFile(file));
                 notesText.setCaretPosition(0);
@@ -163,6 +184,158 @@ public class MainEditor
        }
    }
    
+   class FindHandler
+   {
+       private void unhideFindDialog()
+       {
+                findDialog.setVisible(true);
+                searchIndices = null;
+                currentSearchIndex = 0; 
+        }
+       private void createAndShowFindDialog() {
+                findDialog = new JDialog(menuArea, "Search");
+                findDialog.setSize(240,120);
+                findDialog.setLocationByPlatform(true);
+                findDialog.setResizable(false);
+                Container findPane = findDialog.getContentPane();
+                JLabel findLabel = new JLabel("Find");
+                JTextField tF = new JTextField(15);
+                JLabel dir = new JLabel("Direction");
+                ButtonGroup buttons = new ButtonGroup();
+                JRadioButton forward = new JRadioButton("Forward", true);
+                JRadioButton backward = new JRadioButton("Backward");
+                buttons.add(forward);
+                buttons.add(backward);
+ 
+                JCheckBox checkBox = new JCheckBox("Insensitive");
+ 
+                JButton searchButton = new JButton("Search");
+                searchButton.setActionCommand("Search");
+                searchButton.addActionListener((ActionEvent ae) -> {
+                    JTextField tF1 = (JTextField)findDialog.getContentPane().getComponent(1);
+                    JRadioButton forward1 = (JRadioButton)findDialog.getContentPane().getComponent(3);
+                    boolean isForward = forward1.isSelected();
+                    String key = tF1.getText();
+                    String contentText = notesText.getText();
+                    //System.out.println(key + contentText);
+                    if (key == null || "".equals(key.trim())) {
+                        JOptionPane.showMessageDialog(findDialog, "Please enter a word to search!");
+                        return;
+                    }
+                    directionChanged = lastDirection ^ isForward;
+                    lastDirection = isForward;
+                    if (searchIndices == null) {
+                        searchIndices = new ArrayList<>();
+                        int index = 0;
+                        while (contentText.indexOf(key, index + key.length()) != -1) {
+                            index = contentText.indexOf(key, index + key.length());
+                            searchIndices.add(index);
+                            //System.out.println("Index:" + index);
+                            Highlighter highlighter = notesText.getHighlighter();
+                            HighlightPainter painter = new DefaultHighlighter.DefaultHighlightPainter(Color.pink);
+                            int p0 = contentText.indexOf(key);
+                            int p1 = p0 + key.length();
+                            try {
+                                highlighter.addHighlight(p0, p1, painter );
+                            } catch (BadLocationException ex) {
+                                Logger.getLogger(MainEditor.class.getName()).log(Level.SEVERE, null, ex);
+                            }
+                        }
+                    }
+                    if (currentSearchIndex >= searchIndices.size() || currentSearchIndex < 0) {
+                        if (directionChanged && currentSearchIndex >= searchIndices.size()) {
+                            currentSearchIndex = searchIndices.size() - 2;
+                            //System.out.println("Reducing the searchIndex by 2");
+                        } else if (directionChanged && currentSearchIndex < 0) {
+                            currentSearchIndex = 1;
+                            //System.out.println("Reducing the searchIndex to 1");
+                        } else {
+                            //System.out.println("currentSearchIndex:" + currentSearchIndex);
+                            if (searchIndices.size() > 0) {
+                                JOptionPane.showMessageDialog(findDialog, "No more search!");
+                            } else {
+                                JOptionPane.showMessageDialog(findDialog, "Keyword not found!");
+                            }
+                            return;
+                        }
+                    }
+                    if (isForward) {
+                        //System.out.println("Searching in forward direction.");
+                        int contentIndex = searchIndices.get(currentSearchIndex);
+                        contentArea.select(contentIndex, contentIndex + key.length());
+                        currentSearchIndex++;
+                    } else {
+                        //System.out.println("Searching in reverse direction.");
+                        int contentIndex = searchIndices.get(currentSearchIndex);
+                        contentArea.select(contentIndex, contentIndex + key.length());
+                        currentSearchIndex--;
+                    }
+                });                           
+ 
+                GridBagLayout layout = new GridBagLayout();
+                findDialog.setLayout(layout);
+                GridBagConstraints fieldprops = new GridBagConstraints();
+                GridBagConstraints labelConstraints = new GridBagConstraints();
+ 
+                labelConstraints.weightx = 0.0;
+                labelConstraints.gridwidth = 1;
+                labelConstraints.anchor = GridBagConstraints.WEST;
+                layout.addLayoutComponent(findLabel, labelConstraints);
+ 
+                fieldprops.weightx = 1.0;
+                fieldprops.gridwidth = GridBagConstraints.REMAINDER;
+                fieldprops.anchor = GridBagConstraints.WEST;
+                fieldprops.fill = GridBagConstraints.HORIZONTAL;
+                layout.addLayoutComponent(tF, fieldprops);
+ 
+                labelConstraints.weightx = 0.0;
+                labelConstraints.gridwidth = 1;
+                labelConstraints.anchor = GridBagConstraints.WEST;                              
+                layout.addLayoutComponent(dir, labelConstraints);
+ 
+                fieldprops.weightx = 0.0;
+                fieldprops.gridwidth = 1;
+                fieldprops.anchor = GridBagConstraints.WEST;
+                layout.addLayoutComponent(forward, fieldprops);
+ 
+                fieldprops.weightx = 0.0;
+                fieldprops.gridwidth = GridBagConstraints.REMAINDER;
+                fieldprops.anchor = GridBagConstraints.WEST;
+                layout.addLayoutComponent(backward, fieldprops);
+ 
+                fieldprops.weightx = 0.0;
+                fieldprops.gridwidth = 1;
+                fieldprops.anchor = GridBagConstraints.WEST;
+ 
+                layout.addLayoutComponent(checkBox, fieldprops);
+ 
+                fieldprops.weightx = 0.0;
+                fieldprops.gridwidth = GridBagConstraints.REMAINDER;
+                fieldprops.anchor = GridBagConstraints.EAST;
+                layout.addLayoutComponent(searchButton, fieldprops);
+ 
+                findPane.add(findLabel);
+                findPane.add(tF);
+                findPane.add(dir);
+                findPane.add(forward);
+                findPane.add(backward);
+                findPane.add(checkBox);
+                findPane.add(searchButton);                                
+                
+                //findDialog.pack();
+                findDialog.setVisible(true);
+        }
+       private void FindCommand()
+       {
+           if (findDialog != null) {
+                                unhideFindDialog();
+                        } else {
+                                createAndShowFindDialog();
+                        }
+       }
+       
+   }
+   
    public static void main(String[] args)
    {
       MainEditor  swingMenuDemo = new MainEditor();     
@@ -176,12 +349,11 @@ public class MainEditor
       menuArea.setLayout(new GridLayout(1,1));
 
       menuArea.addWindowListener(new WindowAdapter() {
-         @Override
-         public void windowClosing(WindowEvent windowEvent){
+         public void menuAreaClosing(WindowEvent menuAreaEvent){
             System.exit(0);
          }        
       });    
-      contentArea = new JPanel();
+      contentArea = new JTextArea();
       contentArea.setLayout(new FlowLayout());
       menuArea.add(contentArea);
       menuArea.setVisible(true);  
@@ -201,7 +373,6 @@ public class MainEditor
       newMenuItem.addActionListener((ActionEvent ae) -> {
           MainEditor.NewHandler n = new NewHandler();
           n.NewCommand();
-          //System.out.println("Finished");
       });
 
       JMenuItem openMenuItem = new JMenuItem("Open              Ctrl+O");
@@ -211,7 +382,7 @@ public class MainEditor
           MainEditor.OpenHandler n = new OpenHandler();
           try {
               n.OpenCommand();
-              //System.out.println("Finished");
+              
           } catch (IOException ex) {
               Logger.getLogger(MainEditor.class.getName()).log(Level.SEVERE, null, ex);
           }
@@ -223,7 +394,7 @@ public class MainEditor
       saveMenuItem.addActionListener((ActionEvent ae) -> {
           MainEditor.SaveHandler n = new SaveHandler();
           n.SaveCommand(true);
-          //System.out.println("Finished");
+          
       });
       
       JMenuItem saveAsMenuItem = new JMenuItem("SaveAs               ");
@@ -231,7 +402,7 @@ public class MainEditor
       saveAsMenuItem.addActionListener((ActionEvent ae) -> {
           MainEditor.SaveHandler n = new SaveHandler();
           n.SaveCommand(false);
-          //System.out.println("Finished");
+          
       });
       
       JMenuItem exitMenuItem = new JMenuItem("Exit                 Ctrl+X");
@@ -244,16 +415,17 @@ public class MainEditor
               menuArea.dispose();
               System.exit(0);
           }
-          //System.out.println("Finished");
+          
       });
-
-      JMenuItem undoMenuItem = new JMenuItem("Undo                 Ctrl+Z");
-      undoMenuItem.setMnemonic(KeyEvent.VK_Z);
-      undoMenuItem.setActionCommand("Undo");
       
       JMenuItem findMenuItem = new JMenuItem("Find                   Ctrl+F");
       findMenuItem.setMnemonic(KeyEvent.VK_F);
       findMenuItem.setActionCommand("Find");
+      findMenuItem.addActionListener((ActionEvent ae) -> {
+          MainEditor.FindHandler n = new FindHandler();
+          n.FindCommand();
+      });
+      
       
       JMenuItem replaceMenuItem = new JMenuItem("Replace           Ctrl+R");
       replaceMenuItem.setMnemonic(KeyEvent.VK_R);
@@ -267,8 +439,6 @@ public class MainEditor
       fileMenu.add(exitMenuItem);        
       fileMenu.setBackground(Color.WHITE);
       
-      editMenu.add(undoMenuItem);
-      editMenu.addSeparator();
       editMenu.add(findMenuItem);
       editMenu.add(replaceMenuItem);
       editMenu.setBackground(Color.WHITE);

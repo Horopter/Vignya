@@ -39,7 +39,6 @@ public class TextLineNumber extends JPanel
 
 	private JTextComponent component;
 
-	//  Properties that can be changed
 
 	private boolean updateFont;
 	private int borderGap;
